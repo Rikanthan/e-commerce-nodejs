@@ -1,4 +1,5 @@
 import firebase from '../firebase.js';
+import { getImageUrl } from '../middleware/imageUrl.js';
 import Product from '../models/product.js';
 import {
   getFirestore,
@@ -12,12 +13,48 @@ import {
 } from 'firebase/firestore';
 
 const db = getFirestore(firebase);
+import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 
+const metadata = {
+    contentType: 'image/jpeg'
+};
+const storage = getStorage();
 //create new product
 
 export const createProduct = async (req, res, next) => {
   try {
-    const data = req.body;
+    let data = req.body;
+    let imageUrl = ''
+    if (!req.file) {
+      return res.status(400).send('No file uploaded.');
+    }
+    //data.imageUrl = await getImageUrl(req.file);
+    const storageRef = ref(storage, `images/${req.file.originalname}`);
+    const uploadTask = uploadBytesResumable(storageRef, req.file.buffer, metadata);
+
+    uploadTask.on('state_changed',
+        (snapshot) => {
+            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+            console.log('Upload is ' + progress + '% done');
+            switch (snapshot.state) {
+                case 'paused':
+                    console.log('Upload is paused');
+                    break;
+                case 'running':
+                    console.log('Upload is running');
+                    break;
+            }
+        },
+        (error) => {
+            console.log(`${error}`)
+        },
+        () => {
+            getDownloadURL(uploadTask.snapshot.ref).then((downloadURL) => {
+                console.log('File available at', downloadURL);
+                imageUrl = downloadURL;
+            });
+        }
+    );
     await addDoc(collection(db, 'products'), data);
     res.status(200).send('product created successfully');
   } catch (error) {
